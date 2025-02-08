@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Join Meeting</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-100 h-screen flex items-center justify-center">
+    <div class="bg-white p-8 rounded-lg shadow-lg max-w-md w-full">
+        <h1 class="text-2xl font-bold text-gray-800 mb-6 text-center">Join Meeting</h1>
+        <form id="joinForm" class="space-y-4">
+            <div>
+                <label class="block text-gray-700 text-sm font-semibold mb-2">Your Name</label>
+                <input type="text" id="username"
+                    class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-blue-500" required>
+            </div>
+            <button type="submit"
+                class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition duration-200">
+                Join Now
+            </button>
+        </form>
+    </div>
+    <!-- Add this modal at the end of body -->
+    <div id="errorModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+        <div class="bg-white p-6 rounded-lg max-w-md">
+            <h2 class="text-xl font-bold mb-4" id="errorTitle"></h2>
+            <p id="errorMessage"></p>
+            <button onclick="document.getElementById('errorModal').classList.add('hidden')"
+                class="mt-4 bg-blue-500 text-white px-4 py-2 rounded">
+                OK
+            </button>
+        </div>
+    </div>
+
+    <script>
+        function showError(title, message) {
+            document.getElementById('errorTitle').textContent = title;
+            document.getElementById('errorMessage').textContent = message;
+            document.getElementById('errorModal').classList.remove('hidden');
+        }
+
+        // Check for media support before allowing join
+        document.getElementById('joinForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                showError('Browser Not Supported', 'This browser doesn\'t support video calling. Please use Chrome, Firefox, or Safari.');
+                return;
+            }
+
+            const username = document.getElementById('username').value;
+            window.location.href = `/meeting.html?username=${encodeURIComponent(username)}`;
+        });
+    </script>
+
+</body>
+
+</html>
