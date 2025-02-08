@@ -3,7 +3,7 @@ const username = new URLSearchParams(window.location.search).get("username");
 let localStream;
 const peers = new Map();
 
-// Debugging elements
+// Debugging element
 const debugDiv = document.createElement("div");
 debugDiv.style.position = "fixed";
 debugDiv.style.top = "10px";
@@ -31,7 +31,6 @@ async function init() {
   } else {
     await startMedia();
   }
-  // Add to the init() function
   window.addEventListener("beforeunload", endCall);
   window.addEventListener("pagehide", endCall);
 }
@@ -40,7 +39,7 @@ async function startMedia() {
   try {
     document.getElementById("permissionModal").classList.add("hidden");
 
-    // Use basic constraints to avoid device enumeration issues
+    // Use basic constraints
     localStream = await navigator.mediaDevices.getUserMedia({
       video: { width: 640, height: 480 },
       audio: true,
@@ -57,6 +56,13 @@ async function startMedia() {
 }
 
 function setupSocketIO() {
+  socket.on("room-full", (message) => {
+    showError("Meeting Full", message);
+    endCall();
+    setTimeout(() => {
+      window.location.href = "/";
+    }, 3000);
+  });
   socket.on("existing-users", handleExistingUsers);
   socket.on("new-user", handleNewUser);
   socket.on("user-left", handleUserLeft);
@@ -70,34 +76,35 @@ function setupSocketIO() {
   });
 }
 
-// Update handleExistingUsers to filter out self
 async function handleExistingUsers(userList) {
   logDebug(`Existing users: ${userList.length}`);
   for (const user of userList) {
     if (user.id !== socket.id) {
+      // Store the username and a placeholder for the peer connection
+      peers.set(user.id, { peer: null, username: user.username });
       await createPeerConnection(user.id);
     }
   }
 }
 
-// Modify handleNewUser to check existing connections
-async function handleNewUser({ id: userId, username, existingUsers }) {
+async function handleNewUser({ id: userId, username }) {
   logDebug(`New user joined: ${username} (${userId})`);
-
-  // Check if we already have a connection
-  if (!peers.has(userId) && !existingUsers.includes(socket.id)) {
-    await createPeerConnection(userId);
+  // Only add if not already present
+  if (!peers.has(userId)) {
+    peers.set(userId, { peer: null, username });
   }
+  await createPeerConnection(userId);
+  updateParticipantsList();
 }
 
 async function createPeerConnection(userId) {
-  if (peers.has(userId)) {
-    logDebug(`Existing connection to ${userId}`);
-    return;
+  // Only create a new connection if one hasn't been established yet
+  if (peers.get(userId)?.peer) {
+    logDebug(`Peer connection already exists for ${userId}`);
+    return peers.get(userId).peer;
   }
 
   logDebug(`Creating peer connection with ${userId}`);
-
   const configuration = {
     iceServers: [
       { urls: "stun:stun.l.google.com:19302" },
@@ -110,7 +117,9 @@ async function createPeerConnection(userId) {
   };
 
   const peer = new RTCPeerConnection(configuration);
-  peers.set(userId, { peer, username: "Connecting..." });
+  const storedData = peers.get(userId) || {};
+  const remoteUsername = storedData.username || "Remote User";
+  peers.set(userId, { peer, username: remoteUsername });
 
   // Add local tracks
   localStream.getTracks().forEach((track) => {
@@ -119,12 +128,12 @@ async function createPeerConnection(userId) {
 
   // Handle remote media
   peer.ontrack = (event) => {
-    logDebug(`Received media from ${userId}`);
     const stream = event.streams[0];
     updateVideoElement(userId, stream);
+    updatePeerUsername(userId, remoteUsername);
   };
 
-  // ICE Candidate handling
+  // ICE candidate handling
   peer.onicecandidate = ({ candidate }) => {
     if (candidate) {
       logDebug(`Sending ICE candidate to ${userId}`);
@@ -136,55 +145,31 @@ async function createPeerConnection(userId) {
     }
   };
 
-  // Add this to peer initialization
-  peer.onnegotiationneeded = async () => {
-    logDebug(`Negotiation needed with ${userId}`);
-    try {
-      if (socket.id < userId) {
-        const offer = await peer.createOffer();
-        await peer.setLocalDescription(offer);
-        socket.emit("offer", {
-          target: userId,
-          offer: peer.localDescription.toJSON(),
-          sender: socket.id,
-        });
-      }
-    } catch (error) {
-      logDebug(`Negotiation error: ${error.message}`);
-    }
-  };
-
   peer.onicecandidateerror = (error) => {
     logDebug(`ICE Candidate Error: ${error.errorCode} ${error.errorText}`);
   };
 
-  // Connection state handling
   peer.onconnectionstatechange = () => {
     logDebug(`Connection state (${userId}): ${peer.connectionState}`);
     if (peer.connectionState === "connected") {
-      updatePeerUsername(userId, "Remote User");
+      updatePeerUsername(userId, remoteUsername);
     }
   };
 
-  // Create offer if initiator
-  // In createPeerConnection function, modify the offer creation condition
-  if (userId !== socket.id) {
-    // Add deterministic offer initiation
-    if (socket.id < userId) {
-      // Only lower ID initiates offer
-      try {
-        const offer = await peer.createOffer();
-        await peer.setLocalDescription(offer);
-        logDebug(`Sending offer to ${userId}`);
-
-        socket.emit("offer", {
-          target: userId,
-          offer: peer.localDescription.toJSON(),
-          sender: socket.id,
-        });
-      } catch (error) {
-        logDebug(`Offer error: ${error.message}`);
-      }
+  // Only one side should initiate the offer.
+  // Here we use a simple deterministic check based on the socket IDs.
+  if (socket.id < userId) {
+    try {
+      const offer = await peer.createOffer();
+      await peer.setLocalDescription(offer);
+      logDebug(`Sending offer to ${userId}`);
+      socket.emit("offer", {
+        target: userId,
+        offer: peer.localDescription.toJSON(),
+        sender: socket.id,
+      });
+    } catch (error) {
+      logDebug(`Offer error: ${error.message}`);
     }
   }
 
@@ -194,12 +179,10 @@ async function createPeerConnection(userId) {
 async function handleReceiveOffer({ offer, sender }) {
   logDebug(`Received offer from ${sender}`);
   const peer = await createPeerConnection(sender);
-
   try {
     await peer.setRemoteDescription(new RTCSessionDescription(offer));
     const answer = await peer.createAnswer();
     await peer.setLocalDescription(answer);
-
     socket.emit("answer", {
       target: sender,
       answer: peer.localDescription.toJSON(),
@@ -234,17 +217,14 @@ function handleIceCandidate({ candidate, sender }) {
 
 function handleUserLeft(userId) {
   logDebug(`User left: ${userId}`);
-  const peer = peers.get(userId);
-  if (peer) {
-    // Close peer connection and clean up tracks
-    peer.peer.getSenders().forEach((sender) => {
-      if (sender.track) sender.track.stop();
-    });
-    peer.peer.close();
-    peers.delete(userId);
+  const entry = peers.get(userId);
+  if (entry && entry.peer) {
+    entry.peer.close();
   }
+  peers.delete(userId);
   const videoElement = document.getElementById(`video-${userId}`);
   if (videoElement) videoElement.remove();
+  updateParticipantsList();
 }
 
 function updateVideoElement(userId, stream) {
@@ -253,7 +233,7 @@ function updateVideoElement(userId, stream) {
     videoElement = document.createElement("div");
     videoElement.id = `video-${userId}`;
     videoElement.className =
-      "bg-black rounded-lg overflow-hidden relative aspect-video";
+      "bg-black rounded-lg overflow-hidden border border-green-600 shadow-lg relative aspect-video w-full max-w-[600px] flex justify-center items-center";
 
     const video = document.createElement("video");
     video.autoplay = true;
@@ -267,8 +247,33 @@ function updateVideoElement(userId, stream) {
     videoElement.appendChild(video);
     videoElement.appendChild(nameTag);
     document.getElementById("videoContainer").appendChild(videoElement);
-  }
 
+    // Setup mute/unmute listeners for tracks (if available)
+    const videoTrack = stream.getVideoTracks()[0];
+    const audioTrack = stream.getAudioTracks()[0];
+
+    if (videoTrack) {
+      videoTrack.onmute = () =>
+        document
+          .getElementById(`remote-video-icon-${userId}`)
+          ?.classList.remove("hidden");
+      videoTrack.onunmute = () =>
+        document
+          .getElementById(`remote-video-icon-${userId}`)
+          ?.classList.add("hidden");
+    }
+
+    if (audioTrack) {
+      audioTrack.onmute = () =>
+        document
+          .getElementById(`remote-audio-icon-${userId}`)
+          ?.classList.remove("hidden");
+      audioTrack.onunmute = () =>
+        document
+          .getElementById(`remote-audio-icon-${userId}`)
+          ?.classList.add("hidden");
+    }
+  }
   const video = videoElement.querySelector("video");
   video.srcObject = stream;
 }
@@ -296,7 +301,6 @@ function handleMediaError(error) {
     default:
       message += error.message;
   }
-
   showError("Media Error", message);
   logDebug(`Media Error: ${error}`);
 }
@@ -306,6 +310,23 @@ function setupControls() {
     const videoTrack = localStream.getVideoTracks()[0];
     if (videoTrack) {
       videoTrack.enabled = !videoTrack.enabled;
+      if (videoTrack.enabled) {
+        document.getElementById("local-video-icon").classList.add("hidden");
+        document
+          .getElementById("toggleVideo")
+          .classList.replace("bg-gray-800", "bg-[#0E3A3A]");
+        document
+          .getElementById("video-icon")
+          .classList.replace("fa-video-slash", "fa-video");
+      } else {
+        document.getElementById("local-video-icon").classList.remove("hidden");
+        document
+          .getElementById("toggleVideo")
+          .classList.replace("bg-[#0E3A3A]", "bg-gray-800");
+        document
+          .getElementById("video-icon")
+          .classList.replace("fa-video", "fa-video-slash");
+      }
       logDebug(`Video ${videoTrack.enabled ? "enabled" : "disabled"}`);
     }
   });
@@ -314,6 +335,23 @@ function setupControls() {
     const audioTrack = localStream.getAudioTracks()[0];
     if (audioTrack) {
       audioTrack.enabled = !audioTrack.enabled;
+      if (audioTrack.enabled) {
+        document.getElementById("local-audio-icon").classList.add("hidden");
+        document
+          .getElementById("toggleAudio")
+          .classList.replace("bg-gray-800", "bg-[#0E3A3A]");
+        document
+          .getElementById("audio-icon")
+          .classList.replace("fa-microphone-slash", "fa-microphone");
+      } else {
+        document.getElementById("local-audio-icon").classList.remove("hidden");
+        document
+          .getElementById("toggleAudio")
+          .classList.replace("bg-[#0E3A3A]", "bg-gray-800");
+        document
+          .getElementById("audio-icon")
+          .classList.replace("fa-microphone", "fa-microphone-slash");
+      }
       logDebug(`Audio ${audioTrack.enabled ? "enabled" : "disabled"}`);
     }
   });
@@ -321,23 +359,59 @@ function setupControls() {
   document.getElementById("endCall").addEventListener("click", endCall);
 }
 
+// Toggle offcanvas when "Participants" button is clicked
+document.getElementById("toggleParticipants").addEventListener("click", () => {
+  const offcanvas = document.getElementById("participantsOffcanvas");
+  offcanvas.classList.toggle("translate-x-full");
+  updateParticipantsList(); // Refresh the list each time the panel is opened
+});
+
+// Close button inside the offcanvas
+document.getElementById("closeParticipants").addEventListener("click", () => {
+  document
+    .getElementById("participantsOffcanvas")
+    .classList.add("translate-x-full");
+});
+
+function updateParticipantsList() {
+  const list = document.getElementById("participantsList");
+  list.innerHTML = ""; // Clear the list before updating
+
+  // Add local user
+  const localItem = document.createElement("li");
+  localItem.textContent = username + " (You)";
+  localItem.classList.add("border-b", "border-gray-800", "pb-1");
+  list.appendChild(localItem);
+
+  // Add remote users from peers (each peer entry contains the remote username)
+  peers.forEach(({ username: remoteUsername }, id) => {
+    const item = document.createElement("li");
+    item.textContent = remoteUsername;
+    item.classList.add("border-b", "border-gray-800", "pb-1");
+    list.appendChild(item);
+  });
+}
+
 function endCall() {
   logDebug("Ending call...");
 
   // Stop local media
   if (localStream) {
-    localStream.getTracks().forEach((track) => {
-      track.stop();
-    });
-    document.getElementById("localVideo").srcObject = null; // Clear video element
+    localStream.getTracks().forEach((track) => track.stop());
+    document.getElementById("localVideo").srcObject = null;
     localStream = null;
   }
 
   // Close all peer connections
-  peers.forEach(({ peer }) => peer.close());
+  peers.forEach(({ peer }) => {
+    if (peer) peer.close();
+  });
   peers.clear();
 
-  // Redirect to home
+  // Disconnect from the signaling server
+  socket.disconnect();
+
+  // Redirect to home (adjust as needed)
   window.location.href = "/";
 }
 

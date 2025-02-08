@@ -10,19 +10,25 @@ const users = new Map();
 io.on("connection", (socket) => {
   console.log(`New connection: ${socket.id}`);
 
-  // Change the existing-users emission logic
   socket.on("join", (username) => {
+    // Check if room is full
+    if (users.size >= 6) {
+      socket.emit("room-full", "Maximum 6 users allowed. Meeting is full.");
+      socket.disconnect(); // Disconnect the socket
+      return;
+    }
+
     console.log(`User joined: ${username} (${socket.id})`);
     users.set(socket.id, { username, socket });
 
-    // Notify others and send existing users WITH USERNAMES
+    // Notify others about the new user
     socket.broadcast.emit("new-user", {
       id: socket.id,
       username,
-      existingUsers: Array.from(users.keys()), // Send all connected IDs
+      existingUsers: Array.from(users.keys()),
     });
 
-    // Send complete user list to new joiner
+    // Send complete user list to the new joiner
     const userList = Array.from(users.entries()).map(([id, data]) => ({
       id,
       username: data.username,
@@ -30,7 +36,6 @@ io.on("connection", (socket) => {
     socket.emit("existing-users", userList);
   });
 
-  // Enhanced logging for signaling
   socket.on("offer", (data) => {
     console.log(`Offer from ${data.sender} to ${data.target}`);
     socket.to(data.target).emit("offer", data);
@@ -44,6 +49,12 @@ io.on("connection", (socket) => {
   socket.on("ice-candidate", (data) => {
     console.log(`ICE candidate from ${data.sender} to ${data.target}`);
     socket.to(data.target).emit("ice-candidate", data);
+  });
+
+  socket.on("disconnect", () => {
+    console.log(`User disconnected: ${socket.id}`);
+    users.delete(socket.id);
+    socket.broadcast.emit("user-left", socket.id);
   });
 });
 

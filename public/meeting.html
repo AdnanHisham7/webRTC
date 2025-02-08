@@ -10,78 +10,111 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/js/all.min.js" defer></script>
 </head>
 
-<body class="bg-gray-900 h-screen">
-    <div class="container mx-auto p-4">
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="videoContainer">
+<body class="bg-[#0A1E1E] h-screen text-white">
+    <div class="container mx-auto p-4 h-full">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 justify-items-center content-start h-[calc(100%-80px)] overflow-y-auto"
+            id="videoContainer">
+
             <!-- Local Video -->
-            <div class="bg-black rounded-lg overflow-hidden relative aspect-video">
+            <div
+                class="bg-black rounded-lg overflow-hidden border border-green-600 shadow-lg relative aspect-video w-full max-w-[600px] flex justify-center items-center">
                 <video id="localVideo" autoplay muted class="w-full h-full object-cover"></video>
-                <div class="absolute bottom-2 left-2 bg-black bg-opacity-50 p-2 rounded-lg">
-                    <span class="text-white text-sm" id="localUsername">You</span>
+                <div id="local-video-icon"
+                    class="absolute inset-0 flex justify-center items-center p-2 rounded-lg hidden">
+                    <span class="text-green-300 text-4xl"><i class="fas fa-video-slash"></i></span>
+                </div>
+                <div id="local-audio-icon"
+                    class="absolute bottom-2 right-2 bg-black bg-opacity-60 p-2 rounded-lg hidden">
+                    <span class="text-green-300 text-sm"><i class="fas fa-microphone-slash"></i></span>
+                </div>
+                <div class="absolute bottom-2 left-2 bg-black bg-opacity-60 p-2 rounded-lg">
+                    <span class="text-green-300 text-sm" id="localUsername">You</span>
                 </div>
             </div>
+
         </div>
 
         <!-- Controls -->
         <div
-            class="fixed bottom-6 left-1/2 transform -translate-x-1/2 flex gap-6 bg-gray-800/90 p-3 rounded-full shadow-lg backdrop-blur-md">
+            class="fixed bottom-6 left-1/2 transform -translate-x-1/2 flex gap-3 bg-[#134B4B] p-3 rounded-lg shadow-xl backdrop-blur-md">
             <!-- Toggle Video -->
             <button id="toggleVideo"
-                class="control-btn flex flex-col items-center text-white hover:text-blue-400 transition">
-                <i class="fas fa-video-slash text-2xl"></i>
+                class="control-btn flex flex-col items-center text-white transition bg-[#0E3A3A] rounded-lg px-4 py-2 shadow-md hover:shadow-lg">
+                <i id="video-icon" class="fas fa-video text-2xl"></i>
                 <span class="text-xs mt-1">Stop Video</span>
             </button>
 
             <!-- Toggle Audio -->
             <button id="toggleAudio"
-                class="control-btn flex flex-col items-center text-white hover:text-blue-400 transition">
-                <i class="fas fa-microphone-slash text-2xl"></i>
+                class="control-btn flex flex-col items-center text-white transition bg-[#0E3A3A] rounded-lg px-4 py-2 shadow-md hover:shadow-lg">
+                <i id="audio-icon" class="fas fa-microphone text-2xl"></i>
                 <span class="text-xs mt-1">Mute</span>
             </button>
 
-            <!-- Participants -->
+            <!-- Participants Button -->
             <button id="toggleParticipants"
-                class="control-btn flex flex-col items-center text-white hover:text-blue-400 transition">
+                class="control-btn flex flex-col items-center text-white transition bg-[#0E3A3A] rounded-lg px-4 py-2 shadow-md hover:shadow-lg">
                 <i class="fas fa-users text-2xl"></i>
                 <span class="text-xs mt-1">Participants</span>
             </button>
 
-            <!-- Chat -->
-            <button id="toggleChat"
-                class="control-btn flex flex-col items-center text-white hover:text-blue-400 transition">
-                <i class="fas fa-comment text-2xl"></i>
-                <span class="text-xs mt-1">Chat</span>
-            </button>
-
-            <!-- Share Screen -->
-            <button id="toggleScreenShare"
-                class="control-btn flex flex-col items-center text-white hover:text-green-400 transition">
-                <i class="fas fa-share-square text-2xl"></i>
-                <span class="text-xs mt-1">Share</span>
-            </button>
 
             <!-- End Call -->
             <button id="endCall"
-                class="control-btn flex flex-col items-center text-red-500 hover:text-red-400 transition">
+                class="control-btn flex flex-col items-center text-white bg-red-700 hover:bg-red-800 transition rounded-lg px-4 py-2 shadow-md hover:shadow-lg">
                 <i class="fas fa-phone-slash text-2xl"></i>
                 <span class="text-xs mt-1">End</span>
             </button>
         </div>
-
-
-
-
     </div>
-    <!-- Add this before the script tag -->
+
+    <!-- Permission Modal -->
     <div id="permissionModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-        <div class="bg-white p-6 rounded-lg max-w-md text-center">
-            <h2 class="text-xl font-bold mb-4">Camera & Mic Access Needed</h2>
-            <p>Please allow camera and microphone access to join the call.</p>
-            <button id="startCallBtn" class="mt-4 bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+        <div class="bg-[#134B4B] p-6 rounded-lg max-w-md text-center shadow-lg">
+            <h2 class="text-xl font-bold mb-4 text-green-300">Camera & Mic Access Needed</h2>
+            <p class="text-gray-300">Please allow camera and microphone access to join the call.</p>
+            <button id="startCallBtn"
+                class="mt-4 bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 shadow-md hover:shadow-lg">
                 Start Call
             </button>
         </div>
     </div>
+
+    <!-- Participants Offcanvas -->
+    <div id="participantsOffcanvas"
+        class="fixed top-0 right-0 h-full w-96 bg-black/40 backdrop-blur-lg text-white transform translate-x-full transition-transform duration-300 ease-in-out shadow-2xl z-50 border-l border-gray-700 flex flex-col">
+        <div class="p-5 flex items-center justify-between">
+            <h3 class="text-xl font-semibold tracking-wide">Participants</h3>
+            <button id="closeParticipants" class="text-gray-400 hover:text-gray-200 transition">
+                ✕
+            </button>
+        </div>
+        <div class="flex-1 overflow-y-auto p-5">
+            <ul id="participantsList" class="space-y-3">
+                <!-- Participant items will be dynamically inserted here -->
+            </ul>
+        </div>
+        <div class="p-5">
+            <button id="closeParticipantsBtn"
+                class="w-full bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white px-4 py-2 rounded-lg shadow-md transition-all">
+                Close
+            </button>
+        </div>
+
+    </div>
+
+    <!-- Error Modal (Added so that showError() works in this page as well) -->
+    <div id="errorModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+        <div class="bg-white p-6 rounded-lg max-w-md">
+            <h2 class="text-xl text-black font-bold mb-4" id="errorTitle"></h2>
+            <p class="text-black" id="errorMessage"></p>
+            <button onclick="document.getElementById('errorModal').classList.add('hidden')"
+                class="mt-4 bg-blue-500 text-white px-4 py-2 rounded">
+                OK
+            </button>
+        </div>
+    </div>
+
     <script src="meeting.js"></script>
 </body>
 
